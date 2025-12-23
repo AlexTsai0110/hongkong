@@ -62,6 +62,78 @@
         }
     </style>
 </head>
+
+<!-- ====== Admin Editor Modal ====== -->
+<div id="editor-modal" class="hidden fixed inset-0 bg-black/40 z-[999] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border">
+    <div class="flex items-center justify-between px-5 py-4 bg-slate-800 text-white">
+      <div class="font-bold">✏️ 編輯行程（Day <span id="ed-day-id"></span>）</div>
+      <button id="ed-close" class="text-xl leading-none">×</button>
+    </div>
+
+    <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">title</label>
+          <input id="ed-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">focus</label>
+          <input id="ed-focus" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">morning_title</label>
+          <input id="ed-morning-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">afternoon_title</label>
+          <input id="ed-afternoon-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">morning_desc（可貼 HTML，例如 createMapLink 產出的 a 連結）</label>
+        <textarea id="ed-morning-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">evening_title</label>
+          <input id="ed-evening-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">notes（用 ; 分隔多筆）</label>
+          <input id="ed-notes" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">afternoon_desc</label>
+        <textarea id="ed-afternoon-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">evening_desc</label>
+        <textarea id="ed-evening-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div class="flex gap-2 justify-end pt-2">
+        <button id="ed-cancel" class="px-4 py-2 rounded-lg border">取消</button>
+        <button id="ed-save" class="px-4 py-2 rounded-lg bg-rose-600 text-white font-bold">儲存到 Sheet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- hidden iframe + form (avoid CORS) -->
+<iframe name="save_iframe" class="hidden"></iframe>
+<form id="save-form" method="POST" target="save_iframe" class="hidden">
+  <input type="hidden" name="payload" id="payload" value="">
+</form>
+
 <body class="bg-stone-50 text-slate-800 font-sans leading-relaxed">
 
     <!-- Navigation / Header -->
@@ -118,6 +190,10 @@
                 <button onclick="updateDay(2)" id="btn-day-2" class="day-btn px-4 py-2 md:px-6 md:py-3 rounded-lg font-bold transition-all shadow-sm bg-white text-slate-600 hover:bg-rose-50 text-sm md:text-base">12/26 迪士尼夢幻</button>
                 <button onclick="updateDay(3)" id="btn-day-3" class="day-btn px-4 py-2 md:px-6 md:py-3 rounded-lg font-bold transition-all shadow-sm bg-white text-slate-600 hover:bg-rose-50 text-sm md:text-base">12/27 旺角與太平山</button>
                 <button onclick="updateDay(4)" id="btn-day-4" class="day-btn px-4 py-2 md:px-6 md:py-3 rounded-lg font-bold transition-all shadow-sm bg-white text-slate-600 hover:bg-rose-50 text-sm md:text-base">12/28 燒鵝與返程</button>
+                <button id="btn-open-editor"
+            class="px-4 py-2 md:px-6 md:py-3 rounded-lg font-bold bg-slate-800 text-white hover:bg-slate-700 transition text-sm md:text-base">
+            ✏️ 編輯行程
+            </button>
             </div>
 
             <!-- Dynamic Day Content Area -->
@@ -472,7 +548,188 @@
             filterFood('all');
             initCharts();
         });
+        // ====== Web App URL（已填入你的 Apps Script Web App）======
+        const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzsxK3SI7B1iQLxnwoBWWK5Hzqm-h32QJPvlnWHlSlO66GYDlmdOxzCWD2mwFfMIXpYPQ/exec";
+
+        // 讓 form 指向 webapp
+        document.getElementById("save-form").action = WEBAPP_URL;
+
+        // 編輯用 token（不要寫死在 HTML，避免被看 source）
+        let ADMIN_TOKEN = "";
+        let CURRENT_EDIT_DAY_ID = 1;
+
+        function openEditor(dayId) {
+        const day = tripData.days.find(d => d.id === dayId);
+        if (!day) return alert("找不到 Day " + dayId);
+
+        CURRENT_EDIT_DAY_ID = dayId;
+
+        document.getElementById("ed-day-id").textContent = String(dayId);
+        document.getElementById("ed-title").value = day.title || "";
+        document.getElementById("ed-focus").value = day.focus || "";
+        document.getElementById("ed-morning-title").value = day.morning?.title || "";
+        document.getElementById("ed-morning-desc").value = day.morning?.desc || "";
+        document.getElementById("ed-afternoon-title").value = day.afternoon?.title || "";
+        document.getElementById("ed-afternoon-desc").value = day.afternoon?.desc || "";
+        document.getElementById("ed-evening-title").value = day.evening?.title || "";
+        document.getElementById("ed-evening-desc").value = day.evening?.desc || "";
+        document.getElementById("ed-notes").value = (day.notes || []).join(";");
+
+        document.getElementById("editor-modal").classList.remove("hidden");
+        }
+
+        function closeEditor() {
+        document.getElementById("editor-modal").classList.add("hidden");
+        }
+
+        document.getElementById("btn-open-editor").addEventListener("click", () => {
+        if (!ADMIN_TOKEN) {
+            ADMIN_TOKEN = prompt("請輸入編輯密碼（TOKEN）");
+            if (!ADMIN_TOKEN) return;
+        }
+        openEditor(CURRENT_EDIT_DAY_ID || 1);
+        });
+
+        document.getElementById("ed-close").addEventListener("click", closeEditor);
+        document.getElementById("ed-cancel").addEventListener("click", closeEditor);
+
+        // 讓「目前 day」跟著切換
+        const _origUpdateDay = updateDay;
+        updateDay = function(dayId){
+        CURRENT_EDIT_DAY_ID = dayId;
+        _origUpdateDay(dayId);
+        };
+
+        // 儲存：更新畫面 + 寫回 Sheet
+        document.getElementById("ed-save").addEventListener("click", async () => {
+        if (!ADMIN_TOKEN) {
+            ADMIN_TOKEN = prompt("請輸入編輯密碼（TOKEN）");
+            if (!ADMIN_TOKEN) return;
+        }
+
+        const dayId = CURRENT_EDIT_DAY_ID;
+
+        const fields = {
+            title: document.getElementById("ed-title").value,
+            focus: document.getElementById("ed-focus").value,
+            morning_title: document.getElementById("ed-morning-title").value,
+            morning_desc: document.getElementById("ed-morning-desc").value,
+            afternoon_title: document.getElementById("ed-afternoon-title").value,
+            afternoon_desc: document.getElementById("ed-afternoon-desc").value,
+            evening_title: document.getElementById("ed-evening-title").value,
+            evening_desc: document.getElementById("ed-evening-desc").value,
+            notes: document.getElementById("ed-notes").value
+        };
+
+        // 1) 先更新本機資料，畫面立刻改
+        const day = tripData.days.find(d => d.id === dayId);
+        if (day) {
+            day.title = fields.title;
+            day.focus = fields.focus;
+            day.morning.title = fields.morning_title;
+            day.morning.desc = fields.morning_desc;
+            day.afternoon.title = fields.afternoon_title;
+            day.afternoon.desc = fields.afternoon_desc;
+            day.evening.title = fields.evening_title;
+            day.evening.desc = fields.evening_desc;
+            day.notes = (fields.notes || "").split(";").map(s=>s.trim()).filter(Boolean);
+            updateDay(dayId);
+        }
+
+        // 2) 送到 Apps Script 寫回 Sheet（用 hidden form submit 避免 CORS）
+        const payloadObj = {
+            token: ADMIN_TOKEN,
+            op: "update_day",
+            dayId: String(dayId),
+            fields
+        };
+
+        document.getElementById("payload").value = JSON.stringify(payloadObj);
+        document.getElementById("save-form").submit();
+
+        alert("已送出儲存（刷新頁面即可看到 Sheet 最新內容）");
+        closeEditor();
+
+        // 3) 可選：重新讀 Sheet 以確保一致
+        try {
+            await loadTripDataFromSheet();
+            updateDay(dayId);
+            filterFood('all');
+        } catch(e) {}
+        });
+
 
     </script>
+    <!-- ====== Admin Editor Modal ====== -->
+<div id="editor-modal" class="hidden fixed inset-0 bg-black/40 z-[999] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border">
+    <div class="flex items-center justify-between px-5 py-4 bg-slate-800 text-white">
+      <div class="font-bold">✏️ 編輯行程（Day <span id="ed-day-id"></span>）</div>
+      <button id="ed-close" class="text-xl leading-none">×</button>
+    </div>
+
+    <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">title</label>
+          <input id="ed-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">focus</label>
+          <input id="ed-focus" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">morning_title</label>
+          <input id="ed-morning-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">afternoon_title</label>
+          <input id="ed-afternoon-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">morning_desc（可貼 HTML，例如 a 連結）</label>
+        <textarea id="ed-morning-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">evening_title</label>
+          <input id="ed-evening-title" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">notes（用 ; 分隔多筆）</label>
+          <input id="ed-notes" class="w-full border rounded-lg px-3 py-2" />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">afternoon_desc</label>
+        <textarea id="ed-afternoon-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">evening_desc</label>
+        <textarea id="ed-evening-desc" class="w-full border rounded-lg px-3 py-2 min-h-[90px]"></textarea>
+      </div>
+
+      <div class="flex gap-2 justify-end pt-2">
+        <button id="ed-cancel" class="px-4 py-2 rounded-lg border">取消</button>
+        <button id="ed-save" class="px-4 py-2 rounded-lg bg-rose-600 text-white font-bold">儲存到 Sheet</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- hidden iframe + form (avoid CORS) -->
+<iframe name="save_iframe" class="hidden"></iframe>
+<form id="save-form" method="POST" target="save_iframe" class="hidden">
+  <input type="hidden" name="payload" id="payload" value="">
+</form>
+
 </body>
 </html>
