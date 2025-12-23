@@ -350,7 +350,7 @@
 
         // --- DATA STORAGE ---
         // 這裡改成空，資料由 Google Sheet 載入
-        const tripData = { days: [], food: [] };
+        let tripData = { days: [], food: [] };
 
         // --- CSV Loader (Google Sheet -> CSV) ---
         function parseCSV(text) {
@@ -538,31 +538,30 @@
 
         async function initApp() {
         // 先顯示載入中（避免閃爍）
-        document.getElementById('day-title').textContent = "載入中...";
-        document.getElementById('day-focus').textContent = "重點：載入中...";
+            document.getElementById('day-title').textContent = "載入中...";
+            document.getElementById('day-focus').textContent = "重點：載入中...";
 
-        try {
-            // 重要：等資料載完再畫畫面
-            if (typeof loadTripDataFromSheet === "function") {
-            const ok = await loadTripDataFromSheet();
-            if (ok === false) {
-                // 若你讓 loadTripDataFromSheet 回傳 false，則用 fallback
-                tripData = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA));
-            }
-            }
-        } catch (e) {
-            console.error("loadTripDataFromSheet failed:", e);
-            tripData = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA));
-        }
 
-        // ✅ 這裡才開始渲染
-        updateDay(1);
-        filterFood('all');
-        initCharts();
+            try {
+                if (typeof loadTripDataFromSheet === "function") {
+                    const ok = await loadTripDataFromSheet();
+                    if (ok === false) throw new Error("Sheet returned false");
+                    }
+                } catch (e) {
+                    console.warn("Sheet load failed, use fallback:", e);
+                    // ✅ 只改內容，不要 tripData = ...
+                    tripData.days = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA.days));
+                    tripData.food = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA.food));
+                }
+
+            // ✅ 一定要跑到這裡才會顯示內容
+            updateDay(1);
+            filterFood('all');
+            initCharts();
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-        initApp();
+            initApp();
         });
 
         // ====== Web App URL（已填入你的 Apps Script Web App）======
