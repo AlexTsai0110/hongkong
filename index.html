@@ -331,6 +331,8 @@
         <p>祝您有一個愉快的香港之旅！ 🎅</p>
         <p class="mt-2 text-xs">Based on user itinerary: Dec 25 - Dec 28, 2025</p>
     </footer>
+    
+    let DISABLE_SHEET_SYNC_UNTIL = 0;
 
     <script>
         // Helper to create Google Maps Link
@@ -369,11 +371,12 @@
 
         async function loadSheetCSV(gid) {
             const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
-            const res = await fetch(url, { cache: "no-store" });
+            const text = await fetch(url, { cache: "no-store" }).then(r => r.text());
             return await res.text();
         }
 
         async function loadTripDataFromSheet() {
+            if (Date.now() < DISABLE_SHEET_SYNC_UNTIL) return;
             try {
                 // days
                 const daysCSV = await loadSheetCSV(DAYS_GID);
