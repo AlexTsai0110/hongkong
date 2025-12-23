@@ -376,50 +376,38 @@
         }
 
         async function loadTripDataFromSheet() {
-            if (Date.now() < DISABLE_SHEET_SYNC_UNTIL) return;
-            try {
-                // days
-                const daysCSV = await loadSheetCSV(DAYS_GID);
-                const daysRows = parseCSV(daysCSV);
-                const daysHeaders = daysRows.shift().map(h => h.trim());
+        try {
+            // ⚠️ 把這兩條換成你目前實際抓的 CSV 連結
+            // 例：gviz/tq?tqx=out:csv&gid=xxx
+            const DAYS_URL = `https://docs.google.com/spreadsheets/d/1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ/edit?gid=0#gid=0`;
+            const FOOD_URL = `https://docs.google.com/spreadsheets/d/1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ/edit?gid=1262044602#gid=1262044602`;
 
-                const days = daysRows.map(r => {
-                    const obj = Object.fromEntries(daysHeaders.map((h,i)=>[h, (r[i] ?? "").trim()]));
-                    return {
-                        id: Number(obj.id),
-                        title: obj.title,
-                        focus: obj.focus,
-                        color: obj.color || "rose",
-                        morning: { title: obj.morning_title, desc: obj.morning_desc },
-                        afternoon: { title: obj.afternoon_title, desc: obj.afternoon_desc },
-                        evening: { title: obj.evening_title, desc: obj.evening_desc },
-                        notes: (obj.notes || "").split(";").map(s => s.trim()).filter(Boolean)
-                    };
-                }).sort((a,b)=>a.id-b.id);
-
-                // food
-                const foodCSV = await loadSheetCSV(FOOD_GID);
-                const foodRows = parseCSV(foodCSV);
-                const foodHeaders = foodRows.shift().map(h => h.trim());
-
-                const food = foodRows.map(r => {
-                    const obj = Object.fromEntries(foodHeaders.map((h,i)=>[h, (r[i] ?? "").trim()]));
-                    return {
-                        name: obj.name,
-                        category: obj.category,
-                        label: obj.label,
-                        query: obj.query
-                    };
-                });
-
-                tripData.days = days;
-                tripData.food = food;
-
-            } catch (err) {
-                console.error(err);
-                alert("載入 Google Sheet 失敗：請確認 Sheet 已設成『知道連結的人可檢視』，以及 SHEET_ID / GID 是否正確。");
+            if (!DAYS_URL || !FOOD_URL) {
+            console.warn("Missing DAYS_URL / FOOD_URL, skip sheet sync.");
+            return false;
             }
+
+            // ✅ 防快取：加時間戳 + no-store
+            const daysText = await fetch(`${DAYS_URL}&_ts=${Date.now()}`, { cache: "no-store" }).then(r => r.text());
+            const foodText = await fetch(`${FOOD_URL}&_ts=${Date.now()}`, { cache: "no-store" }).then(r => r.text());
+
+            // 你原本應該有 CSV parser；如果沒有，我可以再補你一個
+            const days = parseDaysCsv(daysText);   // ← 你原本的 parser
+            const food = parseFoodCsv(foodText);   // ← 你原本的 parser
+
+            if (!Array.isArray(days) || days.length === 0) return false;
+
+            // ✅ 只有成功解析後才覆蓋 tripData
+            tripData.days = days;
+            tripData.food = Array.isArray(food) ? food : tripData.food;
+
+            return true;
+        } catch (e) {
+            console.error("Sheet load error:", e);
+            return false;
         }
+        }
+
 
         // --- CORE LOGIC ---
         function updateDay(dayId) {
@@ -545,12 +533,38 @@
             document.getElementById('mobile-menu').classList.toggle('hidden');
         });
 
-        window.addEventListener('DOMContentLoaded', async () => {
-            await loadTripDataFromSheet();
-            updateDay(1);
-            filterFood('all');
-            initCharts();
+        // ✅ 先保留一份 fallback（就算 Sheet 掛了也不會整站空掉）
+        const FALLBACK_TRIPDATA = JSON.parse(JSON.stringify(tripData));
+
+        async function initApp() {
+        // 先顯示載入中（避免閃爍）
+        document.getElementById('day-title').textContent = "載入中...";
+        document.getElementById('day-focus').textContent = "重點：載入中...";
+
+        try {
+            // 重要：等資料載完再畫畫面
+            if (typeof loadTripDataFromSheet === "function") {
+            const ok = await loadTripDataFromSheet();
+            if (ok === false) {
+                // 若你讓 loadTripDataFromSheet 回傳 false，則用 fallback
+                tripData = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA));
+            }
+            }
+        } catch (e) {
+            console.error("loadTripDataFromSheet failed:", e);
+            tripData = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA));
+        }
+
+        // ✅ 這裡才開始渲染
+        updateDay(1);
+        filterFood('all');
+        initCharts();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+        initApp();
         });
+
         // ====== Web App URL（已填入你的 Apps Script Web App）======
         const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzsxK3SI7B1iQLxnwoBWWK5Hzqm-h32QJPvlnWHlSlO66GYDlmdOxzCWD2mwFfMIXpYPQ/exec";
 
