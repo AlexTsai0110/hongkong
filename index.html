@@ -125,8 +125,8 @@
                 <!-- Header -->
                 <div class="bg-slate-800 text-white p-5 md:p-6 relative overflow-hidden">
                     <div class="absolute top-0 right-0 text-9xl opacity-10 transform translate-x-4 -translate-y-4">✈️</div>
-                    <h2 id="day-title" class="text-xl md:text-2xl font-bold mb-1 relative z-10">Day 1: Dec 25 抵達與聖誕夜</h2>
-                    <p id="day-focus" class="text-emerald-300 font-medium text-sm md:text-base relative z-10">重點：機場快線、叮叮車、K11、蘭桂坊</p>
+                    <h2 id="day-title" class="text-xl md:text-2xl font-bold mb-1 relative z-10">載入中...</h2>
+                    <p id="day-focus" class="text-emerald-300 font-medium text-sm md:text-base relative z-10">重點：載入中...</p>
                 </div>
 
                 <!-- Timeline Content -->
@@ -263,111 +263,89 @@
             return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}" target="_blank" class="map-link" title="在 Google Maps 開啟">${text}</a>`;
         }
 
+        // ====== ✅ 你只要改這 3 個值 ======
+        // Google Sheet 網址格式：
+        // https://docs.google.com/spreadsheets/d/【SHEET_ID】/edit#gid=【GID】
+        const SHEET_ID = "1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ";
+        const DAYS_GID  = "0";
+        const FOOD_GID  = "1262044602";
+
         // --- DATA STORAGE ---
-        const tripData = {
-            days: [
-                {
-                    id: 1,
-                    title: "Day 1: Dec 25 抵達與聖誕夜",
-                    focus: "重點：天星小輪、K11、蘭桂坊",
-                    color: "rose",
-                    morning: {
-                        title: "🚄 12:00 高鐵出發 -> 16:20 航班",
-                        desc: `🚇 <strong>機捷:</strong> A18-A12 (20min) -> ${createMapLink("桃園機場一航")}<br>🛫 16:20 起飛 -> 🛬 18:30 抵達 ${createMapLink("香港機場")}<br>🚊 <strong>機場快線:</strong> 往 ${createMapLink("香港站")} (24min)。`
-                    },
-                    afternoon: {
-                        title: "💙 中環 -> 灣仔 -> 酒店 Check-in",
-                        desc: `💙 ${createMapLink("中環站")} -> ${createMapLink("灣仔站 A3出口", "灣仔站")} (10min)。<br>🏩 <strong>${createMapLink("英皇駿景酒店")} Check in</strong>。<br>🚃 <strong>叮叮車體驗:</strong> 步行至皇后大道東「${createMapLink("聖若瑟小學", "聖若瑟小學 電車站")}」或「${createMapLink("巴路士街", "巴路士街 電車站")}」站 -> 搭往堅尼地城/中環方向 -> <strong>「${createMapLink("菲林明道", "菲林明道 電車站")}」</strong>下車。`
-                    },
-                    evening: {
-                        title: "⛴️ 天星小輪 -> 尖沙咀 -> 蘭桂坊",
-                        desc: `⛴️ ${createMapLink("灣仔碼頭")} -> ${createMapLink("尖沙咀天星碼頭", "尖沙咀天星碼頭")} (10min)。<br>🌃 <strong>${createMapLink("K11 MUSEA")} & ${createMapLink("維多利亞港")} / ${createMapLink("星光大道")}</strong>。<br>🥟 晚餐: <strong>${createMapLink("一點心 (尖沙咀店)", "一點心 尖沙咀")}</strong>。<br>❤️ ${createMapLink("尖沙咀站")} -> ${createMapLink("中環站")} -> 🍹 <strong>${createMapLink("蘭桂坊")}</strong> 小酌。<br>💙 中環 -> 灣仔 -> 🛏️ 回飯店休息。`
-                    },
-                    notes: [
-                        "🎟️ 機場快線票券_Alex.pdf",
-                        "🎟️ 機場快線票券_wkr.pdf"
-                    ]
-                },
-                {
-                    id: 2,
-                    title: "Day 2: Dec 26 迪士尼奇妙聖誕",
-                    focus: "重點：香港迪士尼樂園 (全日)",
-                    color: "pink",
-                    morning: {
-                        title: "🚇 前往迪士尼",
-                        desc: `💙 ${createMapLink("灣仔站")} -> ${createMapLink("中環站")}<br>🧡 ${createMapLink("香港站")} -> ${createMapLink("欣澳站")}<br>🩷 欣澳站 -> ${createMapLink("迪士尼站")}`
-                    },
-                    afternoon: {
-                        title: "🎀 迪士尼樂園",
-                        desc: `盡情享受 ${createMapLink("香港迪士尼樂園")} 奇妙聖誕！記得查看「迪士尼秘笈」。<br>🥨 使用迪士尼餐券用餐。`
-                    },
-                    evening: {
-                        title: "🎆 星夢光影與返程",
-                        desc: "欣賞夜間煙火表演。<br>🛏️ 結束後原路返回飯店休息。"
-                    },
-                    notes: [
-                        "🐰 迪士尼門票.pdf",
-                        "🥨 迪士尼餐券.pdf",
-                        "📖 迪士尼秘笈"
-                    ]
-                },
-                {
-                    id: 3,
-                    title: "Day 3: Dec 27 旺角掃街與太平山",
-                    focus: "重點：旺角、半山扶梯、太平山纜車",
-                    color: "red",
-                    morning: {
-                        title: "❤️ 旺角地道體驗",
-                        desc: `💙 灣仔 -> ${createMapLink("金鐘站")} -> ❤️ ${createMapLink("旺角站")}。<br>🥟 早餐/午餐：<strong>${createMapLink("紅茶冰室 (旺角)", "紅茶冰室 旺角")}</strong>。<br>🪼 逛：<strong>${createMapLink("金魚街")} / ${createMapLink("女人街")}</strong>、${createMapLink("旺角網紅天橋")}、${createMapLink("朗豪坊")}。`
-                    },
-                    afternoon: {
-                        title: "🍜 佐敦美食 -> 中環半山",
-                        desc: `❤️ 旺角 -> ${createMapLink("佐敦站")}：<strong>${createMapLink("麥文記麵家")}</strong> (鮮蝦雲吞)。<br>❤️ 佐敦 -> ${createMapLink("中環站")}。<br>🪜 體驗 <strong>${createMapLink("中環半山手扶梯")}</strong>。<br>🚠 <strong>${createMapLink("太平山纜車", "花園道山頂纜車總站")}</strong> (建議時段 15:00-18:00)。`
-                    },
-                    evening: {
-                        title: "⛴️ 雙重渡輪體驗",
-                        desc: `⛴️ 天星小輪: ${createMapLink("中環碼頭")} -> ${createMapLink("尖沙咀")} (看夜景)。<br>⛴️ 天星小輪: 尖沙咀 -> ${createMapLink("灣仔")}。<br>🛏️ 回飯店休息。`
-                    },
-                    notes: []
-                },
-                {
-                    id: 4,
-                    title: "Day 4: Dec 28 燒鵝與伴手禮",
-                    focus: "重點：甘牌燒鵝、Bakehouse、返程",
-                    color: "amber",
-                    morning: {
-                        title: "灣仔燒鵝名店",
-                        desc: `早餐/午餐：<strong>${createMapLink("甘牌燒鵝")}</strong> 或 <strong>${createMapLink("棋哥燒鵝")}</strong>。<br>💙 灣仔站 -> ${createMapLink("銅鑼灣站")}。`
-                    },
-                    afternoon: {
-                        title: "🥧 掃貨 Bakehouse & Hashtag B",
-                        desc: `購買蛋塔伴手禮 (留意分店營業時間)。<br>💙 灣仔 -> 中環。<br>💚 香港站 -> <strong>${createMapLink("香港機場站", "香港國際機場機場站")}</strong>。`
-                    },
-                    evening: {
-                        title: "✈️ 16:45 起飛返家",
-                        desc: `🛫 16:45 ${createMapLink("香港機場")} -> 🛬 17:20 ${createMapLink("桃園機場")}。<br>🚇 機捷 -> 🚌 高鐵 -> 🚕 平安回家！`
-                    },
-                    notes: [
-                        `🥧 ${createMapLink("Bakehouse")}`,
-                        `🥧 ${createMapLink("Hashtag B")}`
-                    ]
+        // 這裡改成空，資料由 Google Sheet 載入
+        const tripData = { days: [], food: [] };
+
+        // --- CSV Loader (Google Sheet -> CSV) ---
+        function parseCSV(text) {
+            const rows = text.trim().split("\n").map(line => {
+                const out = [];
+                let cur = "", inQ = false;
+                for (let i = 0; i < line.length; i++) {
+                    const ch = line[i];
+                    if (ch === '"') inQ = !inQ;
+                    else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
+                    else cur += ch;
                 }
-            ],
-            food: [
-                { name: "一點心 (尖沙咀)", category: "dimsum", label: "港式點心", query: "一點心 尖沙咀" },
-                { name: "甘牌燒鵝", category: "roast", label: "米其林燒鵝", query: "甘牌燒鵝" },
-                { name: "棋哥燒鵝", category: "roast", label: "燒鵝", query: "棋哥燒鵝 灣仔" },
-                { name: "紅茶冰室", category: "local", label: "茶餐廳", query: "紅茶冰室" },
-                { name: "麥文記麵家", category: "local", label: "雲吞麵", query: "麥文記麵家" },
-                { name: "Bakehouse", category: "bakery", label: "酸種蛋塔", query: "Bakehouse Hong Kong" },
-                { name: "Hashtag B", category: "bakery", label: "拿破崙蛋塔", query: "Hashtag B" },
-                { name: "蘭桂坊", category: "local", label: "酒吧/夜生活", query: "蘭桂坊" }
-            ]
-        };
+                out.push(cur);
+                return out.map(s => s.replace(/^"|"$/g, "").replace(/""/g, '"'));
+            });
+            return rows;
+        }
+
+        async function loadSheetCSV(gid) {
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
+            const res = await fetch(url, { cache: "no-store" });
+            return await res.text();
+        }
+
+        async function loadTripDataFromSheet() {
+            try {
+                // days
+                const daysCSV = await loadSheetCSV(DAYS_GID);
+                const daysRows = parseCSV(daysCSV);
+                const daysHeaders = daysRows.shift().map(h => h.trim());
+
+                const days = daysRows.map(r => {
+                    const obj = Object.fromEntries(daysHeaders.map((h,i)=>[h, (r[i] ?? "").trim()]));
+                    return {
+                        id: Number(obj.id),
+                        title: obj.title,
+                        focus: obj.focus,
+                        color: obj.color || "rose",
+                        morning: { title: obj.morning_title, desc: obj.morning_desc },
+                        afternoon: { title: obj.afternoon_title, desc: obj.afternoon_desc },
+                        evening: { title: obj.evening_title, desc: obj.evening_desc },
+                        notes: (obj.notes || "").split(";").map(s => s.trim()).filter(Boolean)
+                    };
+                }).sort((a,b)=>a.id-b.id);
+
+                // food
+                const foodCSV = await loadSheetCSV(FOOD_GID);
+                const foodRows = parseCSV(foodCSV);
+                const foodHeaders = foodRows.shift().map(h => h.trim());
+
+                const food = foodRows.map(r => {
+                    const obj = Object.fromEntries(foodHeaders.map((h,i)=>[h, (r[i] ?? "").trim()]));
+                    return {
+                        name: obj.name,
+                        category: obj.category,
+                        label: obj.label,
+                        query: obj.query
+                    };
+                });
+
+                tripData.days = days;
+                tripData.food = food;
+
+            } catch (err) {
+                console.error(err);
+                alert("載入 Google Sheet 失敗：請確認 Sheet 已設成『知道連結的人可檢視』，以及 SHEET_ID / GID 是否正確。");
+            }
+        }
 
         // --- CORE LOGIC ---
-
         function updateDay(dayId) {
+            if (!tripData.days || tripData.days.length === 0) return;
+
             // 1. Update Buttons
             document.querySelectorAll('.day-btn').forEach(btn => {
                 btn.classList.remove('bg-rose-600', 'text-white', 'scale-105', 'shadow-md');
@@ -379,6 +357,7 @@
 
             // 2. Retrieve Data
             const day = tripData.days.find(d => d.id === dayId);
+            if (!day) return;
             
             // 3. Update Content
             const contentContainer = document.getElementById('day-content');
@@ -386,21 +365,21 @@
             void contentContainer.offsetWidth; 
             contentContainer.classList.add('fade-in');
 
-            document.getElementById('day-title').textContent = day.title;
-            document.getElementById('day-focus').textContent = day.focus;
+            document.getElementById('day-title').textContent = day.title || "";
+            document.getElementById('day-focus').textContent = day.focus || "";
             
             // Set Sections
             const morningDiv = document.getElementById('morning-content');
-            morningDiv.parentElement.querySelector('h4').innerHTML = day.morning.title;
-            morningDiv.innerHTML = day.morning.desc;
+            morningDiv.parentElement.querySelector('h4').innerHTML = day.morning?.title || "";
+            morningDiv.innerHTML = day.morning?.desc || "";
 
             const afternoonDiv = document.getElementById('afternoon-content');
-            afternoonDiv.parentElement.querySelector('h4').innerHTML = day.afternoon.title;
-            afternoonDiv.innerHTML = day.afternoon.desc;
+            afternoonDiv.parentElement.querySelector('h4').innerHTML = day.afternoon?.title || "";
+            afternoonDiv.innerHTML = day.afternoon?.desc || "";
 
             const eveningDiv = document.getElementById('evening-content');
-            eveningDiv.parentElement.querySelector('h4').innerHTML = day.evening.title;
-            eveningDiv.innerHTML = day.evening.desc;
+            eveningDiv.parentElement.querySelector('h4').innerHTML = day.evening?.title || "";
+            eveningDiv.innerHTML = day.evening?.desc || "";
 
             // Set Notes
             const notesContainer = document.getElementById('notes-container');
@@ -429,7 +408,6 @@
                 : tripData.food.filter(item => item.category === filter);
 
             filteredItems.forEach(item => {
-                // Modified to create a link item
                 const li = document.createElement('a');
                 li.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.query || item.name)}`;
                 li.target = "_blank";
@@ -488,7 +466,8 @@
             document.getElementById('mobile-menu').classList.toggle('hidden');
         });
 
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadTripDataFromSheet();
             updateDay(1);
             filterFood('all');
             initCharts();
