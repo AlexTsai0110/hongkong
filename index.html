@@ -331,351 +331,251 @@
         <p>祝您有一個愉快的香港之旅！ 🎅</p>
         <p class="mt-2 text-xs">Based on user itinerary: Dec 25 - Dec 28, 2025</p>
     </footer>
-    
-    let DISABLE_SHEET_SYNC_UNTIL = 0;
 
     <script>
-        // Helper to create Google Maps Link
-        function createMapLink(text, query) {
-            const searchQuery = query || text;
-            return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}" target="_blank" class="map-link" title="在 Google Maps 開啟">${text}</a>`;
+    /** ===== 基本設定 ===== */
+    const SHEET_ID = "1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ";
+    const DAYS_GID = "0";
+    const FOOD_GID = "1262044602";
+    let DISABLE_SHEET_SYNC_UNTIL = 0;
+
+    let tripData = { days: [], food: [] };
+
+    /** ===== 工具：maps link ===== */
+    function createMapLink(text, query) {
+    const searchQuery = query || text;
+    return `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}" target="_blank" class="map-link">${text}</a>`;
+    }
+
+    /** ===== CSV 解析器（支援引號逗號） ===== */
+    function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const rows = [];
+    for (const line of lines) {
+        const out = [];
+        let cur = "", inQ = false;
+        for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; continue; }
+        if (ch === '"') { inQ = !inQ; continue; }
+        if (ch === "," && !inQ) { out.push(cur); cur = ""; continue; }
+        cur += ch;
         }
+        out.push(cur);
+        rows.push(out.map(s => s.trim()));
+    }
+    return rows;
+    }
 
-        // ====== ✅ 你只要改這 3 個值 ======
-        // Google Sheet 網址格式：
-        // https://docs.google.com/spreadsheets/d/【SHEET_ID】/edit#gid=【GID】
-        const SHEET_ID = "1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ";
-        const DAYS_GID  = "0";
-        const FOOD_GID  = "1262044602";
+    function sheetCsvUrl(gid){
+    return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}&_ts=${Date.now()}`;
+    }
 
-        // --- DATA STORAGE ---
-        // 這裡改成空，資料由 Google Sheet 載入
-        let tripData = { days: [], food: [] };
+    /** ===== 讀取 Sheet ===== */
+    async function loadSheetText(gid){
+    const url = sheetCsvUrl(gid);
+    const text = await fetch(url, { cache: "no-store" }).then(r => r.text());
+    return text;
+    }
 
-        // --- CSV Loader (Google Sheet -> CSV) ---
-        function parseCSV(text) {
-            const rows = text.trim().split("\n").map(line => {
-                const out = [];
-                let cur = "", inQ = false;
-                for (let i = 0; i < line.length; i++) {
-                    const ch = line[i];
-                    if (ch === '"') inQ = !inQ;
-                    else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
-                    else cur += ch;
-                }
-                out.push(cur);
-                return out.map(s => s.replace(/^"|"$/g, "").replace(/""/g, '"'));
-            });
-            return rows;
-        }
+    /** ===== 轉換 Days sheet -> tripData.days =====
+     * 期待表頭（你之前 Excel 我幫你做的那個格式）：
+     * id,title,focus,morning_title,morning_desc,afternoon_title,afternoon_desc,evening_title,evening_desc,notes
+     */
+    function buildDaysFromCsv(csvText){
+    const rows = parseCSV(csvText);
+    const header = rows[0].map(h => h.replace(/^"|"$/g,""));
+    const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
 
-        async function loadSheetCSV(gid) {
-            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${gid}`;
-            const text = await fetch(url, { cache: "no-store" }).then(r => r.text());
-            return await res.text();
-        }
+    const get = (r, key) => (idx[key] == null ? "" : (r[idx[key]] ?? "")).replace(/^"|"$/g,"");
 
-        async function loadTripDataFromSheet() {
-        try {
-            // ⚠️ 把這兩條換成你目前實際抓的 CSV 連結
-            // 例：gviz/tq?tqx=out:csv&gid=xxx
-            const DAYS_URL = `https://docs.google.com/spreadsheets/d/1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ/edit?gid=0#gid=0`;
-            const FOOD_URL = `https://docs.google.com/spreadsheets/d/1NmDn4kLVfYnaweW4pAnaY7urcYPCpca2yYM3XXuCBOQ/edit?gid=1262044602#gid=1262044602`;
+    const days = [];
+    for (let i=1;i<rows.length;i++){
+        const r = rows[i];
+        const id = Number(get(r,"id"));
+        if (!id) continue;
 
-            if (!DAYS_URL || !FOOD_URL) {
-            console.warn("Missing DAYS_URL / FOOD_URL, skip sheet sync.");
-            return false;
-            }
+        const notesRaw = get(r,"notes");
+        const notes = notesRaw ? notesRaw.split(";").map(s=>s.trim()).filter(Boolean) : [];
 
-            // ✅ 防快取：加時間戳 + no-store
-            const daysText = await fetch(`${DAYS_URL}&_ts=${Date.now()}`, { cache: "no-store" }).then(r => r.text());
-            const foodText = await fetch(`${FOOD_URL}&_ts=${Date.now()}`, { cache: "no-store" }).then(r => r.text());
-
-            // 你原本應該有 CSV parser；如果沒有，我可以再補你一個
-            const days = parseDaysCsv(daysText);   // ← 你原本的 parser
-            const food = parseFoodCsv(foodText);   // ← 你原本的 parser
-
-            if (!Array.isArray(days) || days.length === 0) return false;
-
-            // ✅ 只有成功解析後才覆蓋 tripData
-            tripData.days = days;
-            tripData.food = Array.isArray(food) ? food : tripData.food;
-
-            return true;
-        } catch (e) {
-            console.error("Sheet load error:", e);
-            return false;
-        }
-        }
-
-
-        // --- CORE LOGIC ---
-        function updateDay(dayId) {
-            if (!tripData.days || tripData.days.length === 0) return;
-
-            // 1. Update Buttons
-            document.querySelectorAll('.day-btn').forEach(btn => {
-                btn.classList.remove('bg-rose-600', 'text-white', 'scale-105', 'shadow-md');
-                btn.classList.add('bg-white', 'text-slate-600', 'hover:bg-rose-50');
-            });
-            const activeBtn = document.getElementById(`btn-day-${dayId}`);
-            activeBtn.classList.remove('bg-white', 'text-slate-600', 'hover:bg-rose-50');
-            activeBtn.classList.add('bg-rose-600', 'text-white', 'scale-105', 'shadow-md');
-
-            // 2. Retrieve Data
-            const day = tripData.days.find(d => d.id === dayId);
-            if (!day) return;
-            
-            // 3. Update Content
-            const contentContainer = document.getElementById('day-content');
-            contentContainer.classList.remove('fade-in');
-            void contentContainer.offsetWidth; 
-            contentContainer.classList.add('fade-in');
-
-            document.getElementById('day-title').textContent = day.title || "";
-            document.getElementById('day-focus').textContent = day.focus || "";
-            
-            // Set Sections
-            const morningDiv = document.getElementById('morning-content');
-            morningDiv.parentElement.querySelector('h4').innerHTML = day.morning?.title || "";
-            morningDiv.innerHTML = day.morning?.desc || "";
-
-            const afternoonDiv = document.getElementById('afternoon-content');
-            afternoonDiv.parentElement.querySelector('h4').innerHTML = day.afternoon?.title || "";
-            afternoonDiv.innerHTML = day.afternoon?.desc || "";
-
-            const eveningDiv = document.getElementById('evening-content');
-            eveningDiv.parentElement.querySelector('h4').innerHTML = day.evening?.title || "";
-            eveningDiv.innerHTML = day.evening?.desc || "";
-
-            // Set Notes
-            const notesContainer = document.getElementById('notes-container');
-            const notesContent = document.getElementById('notes-content');
-            notesContent.innerHTML = ''; 
-
-            if (day.notes && day.notes.length > 0) {
-                notesContainer.classList.remove('hidden');
-                day.notes.forEach(note => {
-                    const span = document.createElement('div');
-                    span.className = "flex items-center bg-white px-2 py-1 rounded border border-amber-200";
-                    span.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2"></span>${note}`;
-                    notesContent.appendChild(span);
-                });
-            } else {
-                notesContainer.classList.add('hidden');
-            }
-        }
-
-        function filterFood(filter) {
-            const list = document.getElementById('food-list');
-            list.innerHTML = ''; 
-
-            const filteredItems = filter === 'all' 
-                ? tripData.food 
-                : tripData.food.filter(item => item.category === filter);
-
-            filteredItems.forEach(item => {
-                const li = document.createElement('a');
-                li.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.query || item.name)}`;
-                li.target = "_blank";
-                li.className = "flex items-center p-3 rounded-lg hover:bg-stone-50 transition border border-transparent hover:border-rose-100 cursor-pointer group";
-                li.innerHTML = `
-                    <span class="w-2 h-2 rounded-full bg-rose-400 mr-3 shrink-0 group-hover:bg-rose-600 transition"></span>
-                    <span class="font-medium flex-1 text-slate-800 group-hover:text-rose-700 transition">${item.name}</span>
-                    <span class="text-xs text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full whitespace-nowrap">${item.label}</span>
-                `;
-                list.appendChild(li);
-            });
-        }
-
-        // --- CHARTS (Same as before) ---
-        function initCharts() {
-            const activityCtx = document.getElementById('activityChart').getContext('2d');
-            new Chart(activityCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['迪士尼', '購物/伴手禮', '美食/餐廳', '交通/觀光'],
-                    datasets: [{
-                        data: [25, 20, 30, 25],
-                        backgroundColor: ['#f472b6', '#fbbf24', '#f87171', '#60a5fa'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 6 } } }
-                }
-            });
-
-            const foodCtx = document.getElementById('foodChart').getContext('2d');
-            new Chart(foodCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['點心/麵食', '燒鵝', '蛋塔/烘焙', '茶餐廳'],
-                    datasets: [{
-                        label: '店家數量',
-                        data: [2, 2, 2, 1],
-                        backgroundColor: ['#fb923c', '#ef4444', '#fcd34d', '#34d399'],
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, display: false }, x: { grid: { display: false } } },
-                    plugins: { legend: { display: false } }
-                }
-            });
-        }
-
-        document.getElementById('mobile-menu-btn').addEventListener('click', () => {
-            document.getElementById('mobile-menu').classList.toggle('hidden');
+        days.push({
+        id,
+        title: get(r,"title"),
+        focus: get(r,"focus"),
+        morning: { title: get(r,"morning_title"), desc: get(r,"morning_desc") },
+        afternoon: { title: get(r,"afternoon_title"), desc: get(r,"afternoon_desc") },
+        evening: { title: get(r,"evening_title"), desc: get(r,"evening_desc") },
+        notes
         });
+    }
+    return days;
+    }
 
-        // ✅ 先保留一份 fallback（就算 Sheet 掛了也不會整站空掉）
-        const FALLBACK_TRIPDATA = JSON.parse(JSON.stringify(tripData));
+    /** ===== 轉換 Food sheet -> tripData.food =====
+     * 期待表頭：
+     * name,category,label,query
+     */
+    function buildFoodFromCsv(csvText){
+    const rows = parseCSV(csvText);
+    const header = rows[0].map(h => h.replace(/^"|"$/g,""));
+    const idx = Object.fromEntries(header.map((h,i)=>[h,i]));
+    const get = (r, key) => (idx[key] == null ? "" : (r[idx[key]] ?? "")).replace(/^"|"$/g,"");
 
-        async function initApp() {
-        // 先顯示載入中（避免閃爍）
-            document.getElementById('day-title').textContent = "載入中...";
-            document.getElementById('day-focus').textContent = "重點：載入中...";
-
-
-            try {
-                if (typeof loadTripDataFromSheet === "function") {
-                    const ok = await loadTripDataFromSheet();
-                    if (ok === false) throw new Error("Sheet returned false");
-                    }
-                } catch (e) {
-                    console.warn("Sheet load failed, use fallback:", e);
-                    // ✅ 只改內容，不要 tripData = ...
-                    tripData.days = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA.days));
-                    tripData.food = JSON.parse(JSON.stringify(FALLBACK_TRIPDATA.food));
-                }
-
-            // ✅ 一定要跑到這裡才會顯示內容
-            updateDay(1);
-            filterFood('all');
-            initCharts();
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            initApp();
+    const food = [];
+    for (let i=1;i<rows.length;i++){
+        const r = rows[i];
+        const name = get(r,"name");
+        if (!name) continue;
+        food.push({
+        name,
+        category: get(r,"category"),
+        label: get(r,"label"),
+        query: get(r,"query")
         });
+    }
+    return food;
+    }
 
-        // ====== Web App URL（已填入你的 Apps Script Web App）======
-        const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzsxK3SI7B1iQLxnwoBWWK5Hzqm-h32QJPvlnWHlSlO66GYDlmdOxzCWD2mwFfMIXpYPQ/exec";
+    async function loadTripDataFromSheet(){
+    if (Date.now() < DISABLE_SHEET_SYNC_UNTIL) return true;
 
-        // 讓 form 指向 webapp
-        document.getElementById("save-form").action = WEBAPP_URL;
+    const [daysText, foodText] = await Promise.all([
+        loadSheetText(DAYS_GID),
+        loadSheetText(FOOD_GID)
+    ]);
 
-        // 編輯用 token（不要寫死在 HTML，避免被看 source）
-        let ADMIN_TOKEN = "";
-        let CURRENT_EDIT_DAY_ID = 1;
+    const days = buildDaysFromCsv(daysText);
+    const food = buildFoodFromCsv(foodText);
 
-        function openEditor(dayId) {
-        const day = tripData.days.find(d => d.id === dayId);
-        if (!day) return alert("找不到 Day " + dayId);
+    if (!days.length) return false;
 
-        CURRENT_EDIT_DAY_ID = dayId;
+    tripData.days = days;
+    tripData.food = food;
+    return true;
+    }
 
-        document.getElementById("ed-day-id").textContent = String(dayId);
-        document.getElementById("ed-title").value = day.title || "";
-        document.getElementById("ed-focus").value = day.focus || "";
-        document.getElementById("ed-morning-title").value = day.morning?.title || "";
-        document.getElementById("ed-morning-desc").value = day.morning?.desc || "";
-        document.getElementById("ed-afternoon-title").value = day.afternoon?.title || "";
-        document.getElementById("ed-afternoon-desc").value = day.afternoon?.desc || "";
-        document.getElementById("ed-evening-title").value = day.evening?.title || "";
-        document.getElementById("ed-evening-desc").value = day.evening?.desc || "";
-        document.getElementById("ed-notes").value = (day.notes || []).join(";");
+    /** ===== UI：render ===== */
+    function updateDay(dayId){
+    if (!tripData.days.length) return;
 
-        document.getElementById("editor-modal").classList.remove("hidden");
-        }
+    document.querySelectorAll('.day-btn').forEach(btn => {
+        btn.classList.remove('bg-rose-600','text-white','scale-105','shadow-md');
+        btn.classList.add('bg-white','text-slate-600','hover:bg-rose-50');
+    });
 
-        function closeEditor() {
-        document.getElementById("editor-modal").classList.add("hidden");
-        }
+    const activeBtn = document.getElementById(`btn-day-${dayId}`);
+    if (activeBtn){
+        activeBtn.classList.remove('bg-white','text-slate-600','hover:bg-rose-50');
+        activeBtn.classList.add('bg-rose-600','text-white','scale-105','shadow-md');
+    }
 
-        document.getElementById("btn-open-editor").addEventListener("click", () => {
-        if (!ADMIN_TOKEN) {
-            ADMIN_TOKEN = prompt("請輸入編輯密碼（TOKEN）");
-            if (!ADMIN_TOKEN) return;
-        }
-        openEditor(CURRENT_EDIT_DAY_ID || 1);
+    const day = tripData.days.find(d=>d.id===dayId);
+    if (!day) return;
+
+    document.getElementById('day-title').textContent = day.title || "";
+    document.getElementById('day-focus').textContent = day.focus || "";
+
+    const morningDiv = document.getElementById('morning-content');
+    morningDiv.parentElement.querySelector('h4').innerHTML = day.morning?.title || "";
+    morningDiv.innerHTML = day.morning?.desc || "";
+
+    const afternoonDiv = document.getElementById('afternoon-content');
+    afternoonDiv.parentElement.querySelector('h4').innerHTML = day.afternoon?.title || "";
+    afternoonDiv.innerHTML = day.afternoon?.desc || "";
+
+    const eveningDiv = document.getElementById('evening-content');
+    eveningDiv.parentElement.querySelector('h4').innerHTML = day.evening?.title || "";
+    eveningDiv.innerHTML = day.evening?.desc || "";
+
+    const notesContainer = document.getElementById('notes-container');
+    const notesContent = document.getElementById('notes-content');
+    notesContent.innerHTML = "";
+
+    if (day.notes && day.notes.length){
+        notesContainer.classList.remove('hidden');
+        day.notes.forEach(note=>{
+        const div = document.createElement('div');
+        div.className = "flex items-center bg-white px-2 py-1 rounded border border-amber-200";
+        div.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-2"></span>${note}`;
+        notesContent.appendChild(div);
         });
+    } else {
+        notesContainer.classList.add('hidden');
+    }
+    }
 
-        document.getElementById("ed-close").addEventListener("click", closeEditor);
-        document.getElementById("ed-cancel").addEventListener("click", closeEditor);
+    function filterFood(filter){
+    const list = document.getElementById('food-list');
+    list.innerHTML = "";
 
-        // 讓「目前 day」跟著切換
-        const _origUpdateDay = updateDay;
-        updateDay = function(dayId){
-        CURRENT_EDIT_DAY_ID = dayId;
-        _origUpdateDay(dayId);
-        };
+    const items = filter === "all" ? tripData.food : tripData.food.filter(x=>x.category===filter);
+    items.forEach(item=>{
+        const a = document.createElement('a');
+        a.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.query || item.name)}`;
+        a.target = "_blank";
+        a.className = "flex items-center p-3 rounded-lg hover:bg-stone-50 transition border border-transparent hover:border-rose-100 cursor-pointer group";
+        a.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-rose-400 mr-3 shrink-0 group-hover:bg-rose-600 transition"></span>
+        <span class="font-medium flex-1 text-slate-800 group-hover:text-rose-700 transition">${item.name}</span>
+        <span class="text-xs text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-full whitespace-nowrap">${item.label || ""}</span>
+        `;
+        list.appendChild(a);
+    });
+    }
 
-        // 儲存：更新畫面 + 寫回 Sheet
-        document.getElementById("ed-save").addEventListener("click", async () => {
-        if (!ADMIN_TOKEN) {
-            ADMIN_TOKEN = prompt("請輸入編輯密碼（TOKEN）");
-            if (!ADMIN_TOKEN) return;
+    let activityChart, foodChart;
+    function initCharts(){
+    // 避免重複建立 chart（會噴錯）
+    if (activityChart) activityChart.destroy();
+    if (foodChart) foodChart.destroy();
+
+    const activityCtx = document.getElementById('activityChart').getContext('2d');
+    activityChart = new Chart(activityCtx, {
+        type:'doughnut',
+        data:{ labels:['迪士尼','購物/伴手禮','美食/餐廳','交通/觀光'],
+        datasets:[{ data:[25,20,30,25], borderWidth:0 }]
+        },
+        options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ position:'right', labels:{ usePointStyle:true, boxWidth:6 } } }
         }
+    });
 
-        const dayId = CURRENT_EDIT_DAY_ID;
-
-        const fields = {
-            title: document.getElementById("ed-title").value,
-            focus: document.getElementById("ed-focus").value,
-            morning_title: document.getElementById("ed-morning-title").value,
-            morning_desc: document.getElementById("ed-morning-desc").value,
-            afternoon_title: document.getElementById("ed-afternoon-title").value,
-            afternoon_desc: document.getElementById("ed-afternoon-desc").value,
-            evening_title: document.getElementById("ed-evening-title").value,
-            evening_desc: document.getElementById("ed-evening-desc").value,
-            notes: document.getElementById("ed-notes").value
-        };
-
-        // 1) 先更新本機資料，畫面立刻改
-        const day = tripData.days.find(d => d.id === dayId);
-        if (day) {
-            day.title = fields.title;
-            day.focus = fields.focus;
-            day.morning.title = fields.morning_title;
-            day.morning.desc = fields.morning_desc;
-            day.afternoon.title = fields.afternoon_title;
-            day.afternoon.desc = fields.afternoon_desc;
-            day.evening.title = fields.evening_title;
-            day.evening.desc = fields.evening_desc;
-            day.notes = (fields.notes || "").split(";").map(s=>s.trim()).filter(Boolean);
-            updateDay(dayId);
+    const foodCtx = document.getElementById('foodChart').getContext('2d');
+    foodChart = new Chart(foodCtx, {
+        type:'bar',
+        data:{ labels:['點心/麵食','燒鵝','蛋塔/烘焙','茶餐廳'],
+        datasets:[{ label:'店家數量', data:[2,2,2,1], borderRadius:4 }]
+        },
+        options:{ responsive:true, maintainAspectRatio:false,
+        scales:{ y:{ beginAtZero:true, display:false }, x:{ grid:{ display:false } } },
+        plugins:{ legend:{ display:false } }
         }
+    });
+    }
 
-        // 2) 送到 Apps Script 寫回 Sheet（用 hidden form submit 避免 CORS）
-        const payloadObj = {
-            token: ADMIN_TOKEN,
-            op: "update_day",
-            dayId: String(dayId),
-            fields
-        };
+    /** ===== init ===== */
+    document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+    document.getElementById('mobile-menu').classList.toggle('hidden');
+    });
 
-        document.getElementById("payload").value = JSON.stringify(payloadObj);
-        document.getElementById("save-form").submit();
+    window.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('day-title').textContent = "載入中...";
+    document.getElementById('day-focus').textContent = "重點：載入中...";
 
-        alert("已送出儲存（刷新頁面即可看到 Sheet 最新內容）");
-        closeEditor();
+    const ok = await loadTripDataFromSheet();
+    if (!ok) {
+        alert("讀取 Google Sheet 失敗：請確認 Sheet 權限設為可公開讀取（Anyone with the link can view）");
+        return;
+    }
 
-        // 3) 可選：重新讀 Sheet 以確保一致
-        // try {
-        //     await loadTripDataFromSheet();
-        //     updateDay(dayId);
-        //     filterFood('all');
-        // } catch(e) {}
-        // });
-
-
+    updateDay(1);
+    filterFood('all');
+    initCharts();
+    });
     </script>
+
+
+    
     <!-- ====== Admin Editor Modal ====== -->
 <div id="editor-modal" class="hidden fixed inset-0 bg-black/40 z-[999] flex items-center justify-center p-4">
   <div class="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden border">
